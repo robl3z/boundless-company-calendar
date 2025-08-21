@@ -1,0 +1,810 @@
+import React, { useState, useEffect } from 'react';
+import { Calendar, Plus, Eye, Settings, Users, Building, MapPin, Clock, Download, Mail } from 'lucide-react';
+
+const BoundlessCompanyCalendar = () => {
+  const [meetings, setMeetings] = useState([]);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [view, setView] = useState('monthly'); // 'monthly' or 'quarterly'
+  const [showAddMeeting, setShowAddMeeting] = useState(false);
+  const [newMeeting, setNewMeeting] = useState({
+    title: '',
+    type: 'townhall',
+    frequency: 'monthly',
+    dayOfMonth: 1,
+    weekOfMonth: 1,
+    dayOfWeek: 1,
+    interval: 1, // For "every 2nd week" etc.
+    duration: 60,
+    startTime: '09:00',
+    description: ''
+  });
+
+  // Holiday data
+  const usHolidays2025 = [
+    { date: '2025-01-01', name: "New Year's Day", country: 'US' },
+    { date: '2025-01-20', name: 'Martin Luther King Jr. Day', country: 'US' },
+    { date: '2025-02-17', name: "Presidents' Day", country: 'US' },
+    { date: '2025-05-26', name: 'Memorial Day', country: 'US' },
+    { date: '2025-06-19', name: 'Juneteenth', country: 'US' },
+    { date: '2025-07-04', name: 'Independence Day', country: 'US' },
+    { date: '2025-09-01', name: 'Labor Day', country: 'US' },
+    { date: '2025-10-13', name: 'Columbus Day', country: 'US' },
+    { date: '2025-11-11', name: 'Veterans Day', country: 'US' },
+    { date: '2025-11-27', name: 'Thanksgiving Day', country: 'US' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'US' }
+  ];
+
+  const philippineHolidays2025 = [
+    { date: '2025-01-01', name: "New Year's Day", country: 'PH' },
+    { date: '2025-02-25', name: 'EDSA People Power Revolution', country: 'PH' },
+    { date: '2025-04-09', name: 'Araw ng Kagitingan (Day of Valor)', country: 'PH' },
+    { date: '2025-04-17', name: 'Maundy Thursday', country: 'PH' },
+    { date: '2025-04-18', name: 'Good Friday', country: 'PH' },
+    { date: '2025-05-01', name: 'Labor Day', country: 'PH' },
+    { date: '2025-06-12', name: 'Independence Day', country: 'PH' },
+    { date: '2025-08-21', name: 'Ninoy Aquino Day', country: 'PH' },
+    { date: '2025-08-25', name: 'National Heroes Day', country: 'PH' },
+    { date: '2025-11-01', name: 'All Saints Day', country: 'PH' },
+    { date: '2025-11-30', name: 'Bonifacio Day', country: 'PH' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'PH' },
+    { date: '2025-12-30', name: 'Rizal Day', country: 'PH' }
+  ];
+
+  const meetingTypes = [
+    { value: 'townhall', label: 'Company Townhall', color: 'bg-blue-500' },
+    { value: 'mbr', label: 'Monthly Business Review', color: 'bg-green-500' },
+    { value: 'strategic', label: 'Strategic Planning', color: 'bg-purple-500' },
+    { value: 'executive', label: 'Executive Team Offsite', color: 'bg-orange-500' },
+    { value: 'board', label: 'Board Meeting', color: 'bg-red-500' },
+    { value: 'quarterly', label: 'Quarterly Review', color: 'bg-indigo-500' },
+    { value: 'other', label: 'Other', color: 'bg-gray-500' }
+  ];
+
+  const weekOptions = [
+    { value: 1, label: '1st week' },
+    { value: 2, label: '2nd week' },
+    { value: 3, label: '3rd week' },
+    { value: 4, label: '4th week' },
+    { value: -1, label: 'Last week' }
+  ];
+
+  const dayOptions = [
+    { value: 0, label: 'Sunday' },
+    { value: 1, label: 'Monday' },
+    { value: 2, label: 'Tuesday' },
+    { value: 3, label: 'Wednesday' },
+    { value: 4, label: 'Thursday' },
+    { value: 5, label: 'Friday' },
+    { value: 6, label: 'Saturday' }
+  ];
+
+  const addMeeting = () => {
+    const meeting = {
+      ...newMeeting,
+      id: Date.now(),
+      color: meetingTypes.find(t => t.value === newMeeting.type)?.color || 'bg-gray-500'
+    };
+    setMeetings([...meetings, meeting]);
+    setNewMeeting({
+      title: '',
+      type: 'townhall',
+      frequency: 'monthly',
+      dayOfMonth: 1,
+      weekOfMonth: 1,
+      dayOfWeek: 1,
+      interval: 1,
+      duration: 60,
+      startTime: '09:00',
+      description: ''
+    });
+    setShowAddMeeting(false);
+  };
+
+  const getNthWeekdayOfMonth = (year, month, weekOfMonth, dayOfWeek) => {
+    if (weekOfMonth === -1) {
+      // Last occurrence of dayOfWeek in month
+      const lastDay = new Date(year, month + 1, 0);
+      const lastWeekday = lastDay.getDay();
+      const daysBack = (lastWeekday - dayOfWeek + 7) % 7;
+      return new Date(year, month, lastDay.getDate() - daysBack);
+    } else {
+      // Nth occurrence of dayOfWeek in month
+      const firstDay = new Date(year, month, 1);
+      const firstWeekday = firstDay.getDay();
+      const daysToAdd = (dayOfWeek - firstWeekday + 7) % 7;
+      const nthOccurrence = new Date(year, month, 1 + daysToAdd + (weekOfMonth - 1) * 7);
+      
+      // Check if this date is still in the same month
+      if (nthOccurrence.getMonth() === month) {
+        return nthOccurrence;
+      }
+      return null;
+    }
+  };
+
+  const generateRecurringDates = (meeting, startDate, endDate) => {
+    const dates = [];
+    const current = new Date(startDate);
+    
+    while (current <= endDate) {
+      let meetingDate = null;
+      
+      if (meeting.frequency === 'monthly') {
+        meetingDate = new Date(current.getFullYear(), current.getMonth(), meeting.dayOfMonth);
+      } else if (meeting.frequency === 'weekly-in-month') {
+        // Every Nth week of each month (e.g., every 2nd Tuesday)
+        meetingDate = getNthWeekdayOfMonth(
+          current.getFullYear(), 
+          current.getMonth(), 
+          meeting.weekOfMonth, 
+          meeting.dayOfWeek
+        );
+      } else if (meeting.frequency === 'weekly') {
+        // Traditional weekly recurring
+        const startOfWeek = new Date(current.getFullYear(), current.getMonth(), 1);
+        while (startOfWeek.getDay() !== meeting.dayOfWeek) {
+          startOfWeek.setDate(startOfWeek.getDate() + 1);
+        }
+        
+        const weeksSinceStart = Math.floor((current - startOfWeek) / (7 * 24 * 60 * 60 * 1000));
+        if (weeksSinceStart % meeting.interval === 0) {
+          meetingDate = new Date(startOfWeek);
+          meetingDate.setDate(startOfWeek.getDate() + (weeksSinceStart * 7));
+        }
+      } else if (meeting.frequency === 'quarterly') {
+        if (current.getMonth() % 3 === 0) { // Jan, Apr, Jul, Oct
+          meetingDate = new Date(current.getFullYear(), current.getMonth(), meeting.dayOfMonth);
+        }
+      } else if (meeting.frequency === 'yearly') {
+        if (current.getMonth() === 0) { // January
+          meetingDate = new Date(current.getFullYear(), 0, meeting.dayOfMonth);
+        }
+      }
+      
+      if (meetingDate && meetingDate >= startDate && meetingDate <= endDate && meetingDate.getMonth() >= current.getMonth()) {
+        dates.push({
+          ...meeting,
+          date: new Date(meetingDate),
+          dateString: meetingDate.toISOString().split('T')[0]
+        });
+      }
+      
+      // Move to next month
+      current.setMonth(current.getMonth() + 1);
+    }
+    
+    return dates;
+  };
+
+  const addToGoogleCalendar = (meeting) => {
+    const startDateTime = new Date(meeting.date);
+    const [hours, minutes] = meeting.startTime.split(':');
+    startDateTime.setHours(parseInt(hours), parseInt(minutes));
+    
+    const endDateTime = new Date(startDateTime);
+    endDateTime.setMinutes(endDateTime.getMinutes() + meeting.duration);
+    
+    const formatDateTime = (date) => {
+      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    };
+    
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: meeting.title,
+      dates: `${formatDateTime(startDateTime)}/${formatDateTime(endDateTime)}`,
+      details: meeting.description || `${meetingTypes.find(t => t.value === meeting.type)?.label || 'Meeting'}`,
+      location: 'Boundless Office'
+    });
+    
+    window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
+  };
+
+  const exportToCSV = () => {
+    const { meetingDates } = getCalendarData();
+    const holidays = getHolidaysInRange(new Date(2025, 0, 1), new Date(2025, 11, 31));
+    
+    const csvData = [];
+    
+    // Add headers
+    csvData.push(['Type', 'Title', 'Date', 'Time', 'Duration (min)', 'Description', 'Frequency']);
+    
+    // Add meetings
+    meetingDates.forEach(meeting => {
+      csvData.push([
+        'Meeting',
+        meeting.title,
+        meeting.date.toLocaleDateString(),
+        meeting.startTime,
+        meeting.duration,
+        meeting.description || '',
+        meeting.frequency
+      ]);
+    });
+    
+    // Add holidays
+    holidays.forEach(holiday => {
+      csvData.push([
+        'Holiday',
+        holiday.name,
+        new Date(holiday.date).toLocaleDateString(),
+        '',
+        '',
+        '',
+        'Yearly'
+      ]);
+    });
+    
+    // Convert to CSV string
+    const csvContent = csvData.map(row => 
+      row.map(cell => `"${cell}"`).join(',')
+    ).join('\n');
+    
+    // Download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `boundless-calendar-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const getCalendarData = () => {
+    const startDate = view === 'monthly' 
+      ? new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+      : new Date(currentDate.getFullYear(), Math.floor(currentDate.getMonth() / 3) * 3, 1);
+    
+    const endDate = view === 'monthly'
+      ? new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+      : new Date(currentDate.getFullYear(), Math.floor(currentDate.getMonth() / 3) * 3 + 3, 0);
+
+    const allMeetingDates = [];
+    meetings.forEach(meeting => {
+      allMeetingDates.push(...generateRecurringDates(meeting, startDate, endDate));
+    });
+
+    return { startDate, endDate, meetingDates: allMeetingDates };
+  };
+
+  const formatDate = (date) => {
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+
+  const formatTime = (timeString) => {
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
+  };
+
+  const getHolidaysInRange = (startDate, endDate) => {
+    const allHolidays = [...usHolidays2025, ...philippineHolidays2025];
+    return allHolidays.filter(holiday => {
+      const holidayDate = new Date(holiday.date);
+      return holidayDate >= startDate && holidayDate <= endDate;
+    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+  };
+
+  const { startDate, endDate, meetingDates } = getCalendarData();
+  const holidays = getHolidaysInRange(startDate, endDate);
+
+  const navigateMonth = (direction) => {
+    const newDate = new Date(currentDate);
+    if (view === 'monthly') {
+      newDate.setMonth(newDate.getMonth() + direction);
+    } else {
+      newDate.setMonth(newDate.getMonth() + (direction * 3));
+    }
+    setCurrentDate(newDate);
+  };
+
+  const getDaysInView = () => {
+    const days = [];
+    const current = new Date(startDate);
+    
+    while (current <= endDate) {
+      const dayMeetings = meetingDates.filter(m => 
+        m.date.toDateString() === current.toDateString()
+      );
+      const dayHolidays = holidays.filter(h => 
+        new Date(h.date).toDateString() === current.toDateString()
+      );
+      
+      // For quarterly view, determine background color based on month
+      let monthBackground = '';
+      if (view === 'quarterly') {
+        const monthIndex = current.getMonth() % 3;
+        if (monthIndex === 0) monthBackground = 'bg-blue-25'; // First month - light blue
+        else if (monthIndex === 1) monthBackground = 'bg-green-25'; // Second month - light green
+        else monthBackground = 'bg-purple-25'; // Third month - light purple
+      }
+      
+      days.push({
+        date: new Date(current),
+        meetings: dayMeetings,
+        holidays: dayHolidays,
+        isToday: current.toDateString() === new Date().toDateString(),
+        isWeekend: current.getDay() === 0 || current.getDay() === 6,
+        monthBackground
+      });
+      
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return days;
+  };
+
+  const days = getDaysInView();
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Calendar className="h-8 w-8 text-blue-600" />
+              <div>
+                {/* Boundless Logo */}
+                <div className="mb-2">
+                  <svg width="120" height="24" viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <text x="0" y="18" fontSize="16" fontWeight="800" fontFamily="Arial, sans-serif" fill="#1f2937" letterSpacing="2px">
+                      BOUNDLESS
+                    </text>
+                  </svg>
+                </div>
+                <h1 className="text-2xl font-bold text-gray-900">Company Calendar</h1>
+                <p className="text-gray-600">Track recurring meetings and key business dates</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setView('monthly')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    view === 'monthly' 
+                      ? 'bg-white text-blue-600 shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Monthly
+                </button>
+                <button
+                  onClick={() => setView('quarterly')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    view === 'quarterly' 
+                      ? 'bg-white text-blue-600 shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Quarterly
+                </button>
+              </div>
+              
+              <button
+                onClick={exportToCSV}
+                className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                <span>Export CSV</span>
+              </button>
+              
+              <button
+                onClick={() => setShowAddMeeting(true)}
+                className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Meeting</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <div className="bg-white rounded-xl shadow-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => navigateMonth(-1)}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              ←
+            </button>
+            
+            <h2 className="text-xl font-semibold text-gray-900">
+              {view === 'monthly' 
+                ? currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                : `Q${Math.floor(currentDate.getMonth() / 3) + 1} ${currentDate.getFullYear()}`
+              }
+            </h2>
+            
+            <button
+              onClick={() => navigateMonth(1)}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              →
+            </button>
+          </div>
+        </div>
+
+        {/* Calendar Grid */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          {view === 'monthly' ? (
+            // Monthly View - Traditional Calendar Grid
+            <>
+              <div className="grid grid-cols-7 gap-1 mb-4">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="p-3 text-center font-semibold text-gray-600 bg-gray-50 rounded">
+                    {day}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="grid grid-cols-7 gap-1">
+                {days.map((day, index) => (
+                  <div
+                    key={index}
+                    className={`min-h-[120px] p-2 border border-gray-100 rounded-lg transition-colors ${
+                      day.isToday ? 'bg-blue-50 border-blue-200' :
+                      day.isWeekend ? 'bg-gray-50' : 'bg-white'
+                    } hover:bg-gray-50`}
+                  >
+                    <div className={`text-sm font-medium mb-2 ${
+                      day.isToday ? 'text-blue-600' : 'text-gray-900'
+                    }`}>
+                      {day.date.getDate()}
+                    </div>
+                    
+                    {day.holidays.map((holiday, idx) => (
+                      <div key={idx} className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded mb-1 flex items-center">
+                        <span className="mr-1">
+                          {holiday.country === 'US' ? '🇺🇸' : '🇵🇭'}
+                        </span>
+                        {holiday.name}
+                      </div>
+                    ))}
+                    
+                    {day.meetings.map((meeting, idx) => (
+                      <div key={idx} className={`text-xs text-white px-2 py-1 rounded mb-1 ${meeting.color} cursor-pointer hover:opacity-80`}>
+                        <div className="font-medium">{meeting.title}</div>
+                        <div className="text-xs opacity-90">{formatTime(meeting.startTime)}</div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToGoogleCalendar(meeting);
+                          }}
+                          className="mt-1 bg-white bg-opacity-20 hover:bg-opacity-30 rounded px-1 py-0.5 text-xs transition-colors"
+                        >
+                          + Gmail
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            // Quarterly View - Vertical Month Layout
+            <div className="space-y-8">
+              {[0, 1, 2].map(monthOffset => {
+                const monthDate = new Date(currentDate.getFullYear(), Math.floor(currentDate.getMonth() / 3) * 3 + monthOffset, 1);
+                const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+                const monthDays = [];
+                const current = new Date(monthDate);
+                
+                while (current <= monthEnd) {
+                  const dayMeetings = meetingDates.filter(m => 
+                    m.date.toDateString() === current.toDateString()
+                  );
+                  const dayHolidays = holidays.filter(h => 
+                    new Date(h.date).toDateString() === current.toDateString()
+                  );
+                  
+                  monthDays.push({
+                    date: new Date(current),
+                    meetings: dayMeetings,
+                    holidays: dayHolidays,
+                    isToday: current.toDateString() === new Date().toDateString(),
+                    isWeekend: current.getDay() === 0 || current.getDay() === 6
+                  });
+                  
+                  current.setDate(current.getDate() + 1);
+                }
+                
+                // Determine background color for each month
+                const monthColors = ['bg-blue-50', 'bg-green-50', 'bg-purple-50'];
+                const borderColors = ['border-blue-200', 'border-green-200', 'border-purple-200'];
+                
+                return (
+                  <div key={monthOffset} className={`${monthColors[monthOffset]} ${borderColors[monthOffset]} border-2 rounded-xl p-4`}>
+                    {/* Month Header */}
+                    <h3 className="text-xl font-bold text-gray-900 mb-4 text-center">
+                      {monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </h3>
+                    
+                    {/* Day Headers */}
+                    <div className="grid grid-cols-7 gap-1 mb-4">
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                        <div key={day} className="p-2 text-center font-semibold text-gray-600 bg-white rounded">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Calendar Grid for Month */}
+                    <div className="grid grid-cols-7 gap-1">
+                      {/* Add empty cells for days before month starts */}
+                      {Array.from({ length: monthDate.getDay() }, (_, i) => (
+                        <div key={`empty-${i}`} className="min-h-[80px] p-1"></div>
+                      ))}
+                      
+                      {/* Month days */}
+                      {monthDays.map((day, index) => (
+                        <div
+                          key={index}
+                          className={`min-h-[80px] p-1 border border-gray-200 rounded transition-colors ${
+                            day.isToday ? 'bg-yellow-100 border-yellow-300' :
+                            day.isWeekend ? 'bg-gray-100' : 'bg-white'
+                          } hover:bg-gray-50`}
+                        >
+                          <div className={`text-sm font-medium mb-1 ${
+                            day.isToday ? 'text-yellow-800' : 'text-gray-900'
+                          }`}>
+                            {day.date.getDate()}
+                          </div>
+                          
+                          {day.holidays.map((holiday, idx) => (
+                            <div key={idx} className="text-xs bg-red-100 text-red-700 px-1 py-0.5 rounded mb-1 flex items-center">
+                              <span className="mr-1">
+                                {holiday.country === 'US' ? '🇺🇸' : '🇵🇭'}
+                              </span>
+                              <span className="truncate">{holiday.name}</span>
+                            </div>
+                          ))}
+                          
+                          {day.meetings.map((meeting, idx) => (
+                            <div key={idx} className={`text-xs text-white px-1 py-0.5 rounded mb-1 ${meeting.color} cursor-pointer hover:opacity-80`}>
+                              <div className="font-medium truncate">{meeting.title}</div>
+                              <div className="text-xs opacity-90">{formatTime(meeting.startTime)}</div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addToGoogleCalendar(meeting);
+                                }}
+                                className="mt-0.5 bg-white bg-opacity-20 hover:bg-opacity-30 rounded px-1 py-0.5 text-xs transition-colors"
+                              >
+                                +📧
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Summary Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Upcoming Meetings */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Users className="h-5 w-5 text-blue-600 mr-2" />
+              Upcoming Meetings
+            </h3>
+            <div className="space-y-3">
+              {meetingDates.slice(0, 8).map((meeting, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900">{meeting.title}</div>
+                    <div className="text-sm text-gray-600">
+                      {formatDate(meeting.date)} at {formatTime(meeting.startTime)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Duration: {meeting.duration} minutes
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded-full ${meeting.color}`}></div>
+                    <button
+                      onClick={() => addToGoogleCalendar(meeting)}
+                      className="text-blue-600 hover:text-blue-800 p-1"
+                      title="Add to Google Calendar"
+                    >
+                      <Mail className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Holidays */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <MapPin className="h-5 w-5 text-red-600 mr-2" />
+              Holidays in Period
+            </h3>
+            <div className="space-y-3">
+              {holidays.slice(0, 8).map((holiday, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                  <div>
+                    <div className="font-medium text-gray-900">{holiday.name}</div>
+                    <div className="text-sm text-gray-600">
+                      {new Date(holiday.date).toLocaleDateString('en-US', { 
+                        weekday: 'long', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}
+                    </div>
+                  </div>
+                  <div className="text-2xl">
+                    {holiday.country === 'US' ? '🇺🇸' : '🇵🇭'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Add Meeting Modal */}
+        {showAddMeeting && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold text-gray-900 mb-6">Add Recurring Meeting</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Title</label>
+                  <input
+                    type="text"
+                    value={newMeeting.title}
+                    onChange={(e) => setNewMeeting({...newMeeting, title: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g., Monthly Townhall"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Type</label>
+                  <select
+                    value={newMeeting.type}
+                    onChange={(e) => setNewMeeting({...newMeeting, type: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {meetingTypes.map(type => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Frequency</label>
+                  <select
+                    value={newMeeting.frequency}
+                    onChange={(e) => setNewMeeting({...newMeeting, frequency: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="weekly-in-month">Specific Week of Month (e.g., every 2nd Tuesday)</option>
+                    <option value="monthly">Monthly (same date)</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
+
+                {newMeeting.frequency === 'weekly-in-month' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Week of Month</label>
+                      <select
+                        value={newMeeting.weekOfMonth}
+                        onChange={(e) => setNewMeeting({...newMeeting, weekOfMonth: parseInt(e.target.value)})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {weekOptions.map(week => (
+                          <option key={week.value} value={week.value}>{week.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Day of Week</label>
+                      <select
+                        value={newMeeting.dayOfWeek}
+                        onChange={(e) => setNewMeeting({...newMeeting, dayOfWeek: parseInt(e.target.value)})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {dayOptions.map(day => (
+                          <option key={day.value} value={day.value}>{day.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                {newMeeting.frequency === 'monthly' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Day of Month</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={newMeeting.dayOfMonth}
+                      onChange={(e) => setNewMeeting({...newMeeting, dayOfMonth: parseInt(e.target.value)})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
+                    <input
+                      type="time"
+                      value={newMeeting.startTime}
+                      onChange={(e) => setNewMeeting({...newMeeting, startTime: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+                    <input
+                      type="number"
+                      min="15"
+                      step="15"
+                      value={newMeeting.duration}
+                      onChange={(e) => setNewMeeting({...newMeeting, duration: parseInt(e.target.value)})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description (Optional)</label>
+                  <textarea
+                    value={newMeeting.description}
+                    onChange={(e) => setNewMeeting({...newMeeting, description: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows="3"
+                    placeholder="Meeting description..."
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setShowAddMeeting(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addMeeting}
+                  disabled={!newMeeting.title}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  Add Meeting
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default BoundlessCompanyCalendar;
